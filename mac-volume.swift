@@ -155,74 +155,74 @@ func listOutputDevices() {
     }
 }
 
-// ---- Main ----
-let args = CommandLine.arguments
-
-// Check for list-devices command
-if args.count == 2 && args[1] == "list-devices" {
-    listOutputDevices()
-} else if args.count == 3 && args[2] == "get" {
-    let deviceName = args[1]
-    if let deviceID = getDeviceID(named: deviceName) {
-        if let currentVolume = getDeviceVolume(deviceID: deviceID) {
-            let volumePercent = Int(currentVolume * 100)
-            print("\(volumePercent)")
-        } else {
-            print("Failed to get volume for \(deviceName)")
-            exit(1)
-        }
-    } else {
+func handleGetVolume(deviceName: String) {
+    guard let deviceID = getDeviceID(named: deviceName) else {
         print("Device not found: \(deviceName)")
         exit(1)
     }
-} else if args.count == 4 && args[2] == "set" {
-    // Set volume mode
-    let deviceName = args[1]
-    let volumeInput = Float32(args[3]) ?? 50.0
+    
+    guard let currentVolume = getDeviceVolume(deviceID: deviceID) else {
+        print("Failed to get volume for \(deviceName)")
+        exit(1)
+    }
+    
+    let volumePercent = Int(currentVolume * 100)
+    print("\(volumePercent)")
+}
+
+func handleSetVolume(deviceName: String, volumeString: String) {
+    guard let deviceID = getDeviceID(named: deviceName) else {
+        print("Device not found: \(deviceName)")
+        exit(1)
+    }
+    
+    let volumeInput = Float32(volumeString) ?? 50.0
     let volume = volumeInput / 100.0
     
-    if let deviceID = getDeviceID(named: deviceName) {
-        if setDeviceVolume(deviceID: deviceID, volume: volume) {
-            print("Set \(deviceName) volume to \(volumeInput)%")
-        } else {
-            print("Failed to set volume for \(deviceName)")
-        }
+    if setDeviceVolume(deviceID: deviceID, volume: volume) {
+        print("Set \(deviceName) volume to \(volumeInput)%")
     } else {
-        print("Device not found: \(deviceName)")
+        print("Failed to set volume for \(deviceName)")
+        exit(1)
     }
-} else if (args.count == 3 || args.count == 4) && (args[2] == "inc" || args[2] == "dec") {
-    // Increment or decrement volume
-    let deviceName = args[1]
-    let command = args[2]
-    let amount = args.count == 4 ? (Float32(args[3]) ?? 2.0) : 2.0
-    
-    if let deviceID = getDeviceID(named: deviceName) {
-        if let currentVolume = getDeviceVolume(deviceID: deviceID) {
-            let currentPercent = currentVolume * 100
-            let newPercent: Float32
-            
-            if command == "inc" {
-                newPercent = min(100.0, currentPercent + amount)
-            } else {
-                newPercent = max(0.0, currentPercent - amount)
-            }
-            
-            let newVolume = newPercent / 100.0
-            
-            if setDeviceVolume(deviceID: deviceID, volume: newVolume) {
-                print("Set \(deviceName) volume to \(Int(newPercent))%")
-            } else {
-                print("Failed to set volume for \(deviceName)")
-            }
-        } else {
-            print("Failed to get current volume for \(deviceName)")
-            exit(1)
-        }
-    } else {
+}
+
+func handleAdjustVolume(deviceName: String, command: String, amountString: String?) {
+    guard let deviceID = getDeviceID(named: deviceName) else {
         print("Device not found: \(deviceName)")
         exit(1)
     }
-} else {
+    
+    guard let currentVolume = getDeviceVolume(deviceID: deviceID) else {
+        print("Failed to get current volume for \(deviceName)")
+        exit(1)
+    }
+    
+    let amount = amountString != nil ? (Float32(amountString!) ?? 2.0) : 2.0
+    let currentPercent = currentVolume * 100
+    let newPercent: Float32
+    
+    switch command {
+    case "inc":
+        newPercent = min(100.0, currentPercent + amount)
+    case "dec":
+        newPercent = max(0.0, currentPercent - amount)
+    default:
+        print("Invalid command: \(command)")
+        exit(1)
+    }
+    
+    let newVolume = newPercent / 100.0
+    
+    if setDeviceVolume(deviceID: deviceID, volume: newVolume) {
+        print("Set \(deviceName) volume to \(Int(newPercent))%")
+    } else {
+        print("Failed to set volume for \(deviceName)")
+        exit(1)
+    }
+}
+
+func showHelp() {
     print("""
 mac-volume v\(version) - Control the volume of a device on your mac
 
@@ -234,4 +234,46 @@ Usage:
   mac-volume <Device Name> dec [amount]
 """)
     exit(0)
+}
+
+// ---- Main ----
+let args = CommandLine.arguments
+
+switch args.count {
+case 2:
+    if args[1] == "list-devices" {
+        listOutputDevices()
+    } else {
+        showHelp()
+    }
+    
+case 3:
+    let deviceName = args[1]
+    let command = args[2]
+    
+    switch command {
+    case "get":
+        handleGetVolume(deviceName: deviceName)
+    case "inc", "dec":
+        handleAdjustVolume(deviceName: deviceName, command: command, amountString: nil)
+    default:
+        showHelp()
+    }
+    
+case 4:
+    let deviceName = args[1]
+    let command = args[2]
+    let argument = args[3]
+    
+    switch command {
+    case "set":
+        handleSetVolume(deviceName: deviceName, volumeString: argument)
+    case "inc", "dec":
+        handleAdjustVolume(deviceName: deviceName, command: command, amountString: argument)
+    default:
+        showHelp()
+    }
+    
+default:
+    showHelp()
 }
